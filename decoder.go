@@ -29,6 +29,7 @@ type MetaValue struct {
 	Offset    int
 	Length    int
 	Depth     int
+	Keys      []string
 	Value     interface{}
 	ValueType ValueType
 }
@@ -142,7 +143,7 @@ func (d *Decoder) decode() {
 	defer close(d.metaCh)
 	d.skipSpaces()
 	for d.pos < atomic.LoadInt64(&d.end) {
-		_, err := d.emitAny()
+		_, err := d.emitAny([]string{})
 		if err != nil {
 			d.err = err
 			break
@@ -151,17 +152,18 @@ func (d *Decoder) decode() {
 	}
 }
 
-func (d *Decoder) emitAny() (interface{}, error) {
+func (d *Decoder) emitAny(pKeys []string) (interface{}, error) {
 	if d.pos >= atomic.LoadInt64(&d.end) {
 		return nil, d.mkError(ErrUnexpectedEOF)
 	}
 	offset := d.pos - 1
-	i, t, err := d.any()
+	i, t, err := d.any(pKeys)
 	if d.willEmit() {
 		d.metaCh <- &MetaValue{
 			Offset:    int(offset),
 			Length:    int(d.pos - offset),
 			Depth:     d.depth,
+			Keys:      pKeys,
 			Value:     i,
 			ValueType: t,
 		}
@@ -180,7 +182,7 @@ func (d *Decoder) willEmit() bool {
 
 // any used to decode any valid JSON value, and returns an
 // interface{} that holds the actual data
-func (d *Decoder) any() (interface{}, ValueType, error) {
+func (d *Decoder) any(pKeys []string) (interface{}, ValueType, error) {
 	c := d.cur()
 
 	switch c {
@@ -224,15 +226,15 @@ func (d *Decoder) any() (interface{}, ValueType, error) {
 		}
 		return nil, Unknown, d.mkError(ErrSyntax, "in literal null")
 	case '[':
-		i, err := d.array()
+		i, err := d.array(pKeys)
 		return i, Array, err
 	case '{':
 		var i interface{}
 		var err error
 		if d.objectAsKVS {
-			i, err = d.objectOrdered()
+			i, err = d.objectOrdered(pKeys)
 		} else {
-			i, err = d.object()
+			i, err = d.object(pKeys)
 		}
 		return i, Object, err
 	default:
@@ -417,9 +419,9 @@ func (d *Decoder) number() (float64, error) {
 }
 
 // array accept valid JSON array value
-func (d *Decoder) array() ([]interface{}, error) {
+func (d *Decoder) array(pKeys []string) ([]interface{}, error) {
 	d.depth++
-
+	parentKeys := append(pKeys, "")
 	var (
 		c     byte
 		v     interface{}
@@ -433,7 +435,7 @@ func (d *Decoder) array() ([]interface{}, error) {
 	}
 
 scan:
-	if v, err = d.emitAny(); err != nil {
+	if v, err = d.emitAny(parentKeys); err != nil {
 		goto out
 	}
 
@@ -458,7 +460,7 @@ out:
 }
 
 // object accept valid JSON array value
-func (d *Decoder) object() (map[string]interface{}, error) {
+func (d *Decoder) object(pKeys []string) (map[string]interface{}, error) {
 	d.depth++
 
 	var (
@@ -501,8 +503,9 @@ scan:
 
 		// read value
 		d.skipSpaces()
+		keys := append(pKeys, k)
 		if d.emitKV {
-			if v, t, err = d.any(); err != nil {
+			if v, t, err = d.any(keys); err != nil {
 				break
 			}
 			if d.willEmit() {
@@ -510,12 +513,13 @@ scan:
 					Offset:    int(offset),
 					Length:    int(d.pos - offset),
 					Depth:     d.depth,
+					Keys:      keys,
 					Value:     KV{k, v},
 					ValueType: t,
 				}
 			}
 		} else {
-			if v, err = d.emitAny(); err != nil {
+			if v, err = d.emitAny(keys); err != nil {
 				break
 			}
 		}
@@ -543,7 +547,7 @@ out:
 }
 
 // object (ordered) accept valid JSON array value
-func (d *Decoder) objectOrdered() (KVS, error) {
+func (d *Decoder) objectOrdered(pKeys []string) (KVS, error) {
 	d.depth++
 
 	var (
@@ -586,8 +590,9 @@ scan:
 
 		// read value
 		d.skipSpaces()
+		keys := append(pKeys, k)
 		if d.emitKV {
-			if v, t, err = d.any(); err != nil {
+			if v, t, err = d.any(keys); err != nil {
 				break
 			}
 			if d.willEmit() {
@@ -595,12 +600,13 @@ scan:
 					Offset:    int(offset),
 					Length:    int(d.pos - offset),
 					Depth:     d.depth,
+					Keys:      keys,
 					Value:     KV{k, v},
 					ValueType: t,
 				}
 			}
 		} else {
-			if v, err = d.emitAny(); err != nil {
+			if v, err = d.emitAny(keys); err != nil {
 				break
 			}
 		}
