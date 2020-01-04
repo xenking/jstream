@@ -28,7 +28,6 @@ func TestScanner(t *testing.T) {
 		t.Logf("pos=%d remaining=%d (%s)", i, r.Len(), string(c))
 		i++
 	}
-
 }
 
 func BenchmarkBufioScanner(b *testing.B) {

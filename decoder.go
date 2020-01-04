@@ -188,17 +188,32 @@ func (d *Decoder) any() (interface{}, ValueType, error) {
 		i, err := d.string()
 		return i, String, err
 	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
-		i, err := d.number()
-		return i, Number, err
+		ii, err := d.number()
+		if err != nil {
+			return nil, Unknown, err
+		}
+		switch v := ii.(type) {
+		case int64, float64:
+			return v, Number, nil
+		default:
+			return nil, Number, d.mkError(ErrSyntax, "invalid number type")
+		}
 	case '-':
 		if c = d.next(); c < '0' && c > '9' {
 			return nil, Unknown, d.mkError(ErrSyntax, "in negative numeric literal")
 		}
-		n, err := d.number()
+		ni, err := d.number()
 		if err != nil {
 			return nil, Unknown, err
 		}
-		return -n, Number, nil
+		switch n := ni.(type) {
+		case int64:
+			return -n, Number, nil
+		case float64:
+			return -n, Number, nil
+		default:
+			return nil, Number, d.mkError(ErrSyntax, "invalid number type")
+		}
 	case 'f':
 		if d.remaining() < 4 {
 			return nil, Unknown, d.mkError(ErrUnexpectedEOF)
@@ -340,12 +355,11 @@ func (d *Decoder) u4() rune {
 }
 
 // number called by `any` after reading number between 0 to 9
-func (d *Decoder) number() (float64, error) {
+func (d *Decoder) number() (interface{}, error) {
 	d.scratch.reset()
 
 	var (
 		c       = d.cur()
-		n       float64
 		isFloat bool
 	)
 
@@ -356,7 +370,6 @@ func (d *Decoder) number() (float64, error) {
 		c = d.next()
 	case '1' <= c && c <= '9':
 		for ; c >= '0' && c <= '9'; c = d.next() {
-			n = 10*n + float64(c-'0')
 			d.scratch.add(c)
 		}
 	}
@@ -401,19 +414,22 @@ func (d *Decoder) number() (float64, error) {
 		}
 	}
 
+	d.back()
+
 	if isFloat {
 		var (
 			err error
-			sn  string
+			n   float64
 		)
-		sn = string(d.scratch.bytes())
+		sn := string(d.scratch.bytes())
 		if n, err = strconv.ParseFloat(sn, 64); err != nil {
 			return 0, err
 		}
+		return n, err
 	}
 
-	d.back()
-	return n, nil
+	sn := string(d.scratch.bytes())
+	return strconv.ParseInt(sn, 10, 64)
 }
 
 // array accept valid JSON array value
