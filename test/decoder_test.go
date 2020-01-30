@@ -1,9 +1,11 @@
-package jstream
+package test
 
 import (
 	"bytes"
 	"runtime/debug"
 	"testing"
+
+	"github.com/xenking/jstream"
 )
 
 func mkReader(s string) *bytes.Reader { return bytes.NewReader([]byte(s)) }
@@ -11,7 +13,7 @@ func mkReader(s string) *bytes.Reader { return bytes.NewReader([]byte(s)) }
 func TestDecoderSimple(t *testing.T) {
 	var (
 		counter int
-		mv      *MetaValue
+		mv      *jstream.MetaValue
 		body    = `[{
 	"bio": "bada bing bada boom",
 	"id": 1,
@@ -20,7 +22,7 @@ func TestDecoderSimple(t *testing.T) {
 }]`
 	)
 
-	decoder := NewDecoder(mkReader(body), 1)
+	decoder := jstream.NewDecoder(mkReader(body), 1)
 
 	for mv = range decoder.Stream() {
 		counter++
@@ -57,7 +59,7 @@ func TestDecoderSimple(t *testing.T) {
 func TestDecoderSimpleForMapMapArray(t *testing.T) {
 	var (
 		counter int
-		mv      *MetaValue
+		mv      *jstream.MetaValue
 		body    = `{
 	"1787005804808765": {
 		"fun1": [1, 2, 3],
@@ -71,7 +73,7 @@ func TestDecoderSimpleForMapMapArray(t *testing.T) {
 }`
 	)
 
-	decoder := NewDecoder(mkReader(body), 2)
+	decoder := jstream.NewDecoder(mkReader(body), 2)
 	for mv = range decoder.Stream() {
 		counter++
 		assertEqual(t, 2, len(mv.Keys))
@@ -110,7 +112,7 @@ func TestDecoderSimpleForMapMapArray(t *testing.T) {
 func TestDecoderSimpleForMapArray(t *testing.T) {
 	var (
 		counter int
-		mv      *MetaValue
+		mv      *jstream.MetaValue
 		body    = `{
 	"1787005804808765": [1, 2, 3],
 	"1786133652424674": [2, 3, 4],
@@ -119,7 +121,7 @@ func TestDecoderSimpleForMapArray(t *testing.T) {
 }`
 	)
 
-	decoder := NewDecoder(mkReader(body), 1)
+	decoder := jstream.NewDecoder(mkReader(body), 1)
 
 	for mv = range decoder.Stream() {
 		counter++
@@ -152,7 +154,7 @@ func TestDecoderSimpleForMapArray(t *testing.T) {
 func TestDecoderSimpleForEmitKV(t *testing.T) {
 	var (
 		counter int
-		mv      *MetaValue
+		mv      *jstream.MetaValue
 		body    = `{
 	"1787005804808765": {
 		"fun1": [1, 2, 3],
@@ -166,11 +168,11 @@ func TestDecoderSimpleForEmitKV(t *testing.T) {
 }`
 	)
 
-	decoder := NewDecoder(mkReader(body), 2).EmitKV()
+	decoder := jstream.NewDecoder(mkReader(body), 2).EmitKV()
 	for mv = range decoder.Stream() {
 		counter++
 		assertEqual(t, 2, len(mv.Keys))
-		uRet, ok := (mv.Value).(KV)
+		uRet, ok := (mv.Value).(jstream.KV)
 		assertTrue(t, ok)
 		assertNotNil(t, uRet)
 		result, ok := (uRet.Value).([]interface{})
@@ -213,7 +215,7 @@ func TestDecoderSimpleForEmitKV(t *testing.T) {
 func TestDecoderSimpleForDepth3(t *testing.T) {
 	var (
 		counter int
-		mv      *MetaValue
+		mv      *jstream.MetaValue
 		body    = `{
 	"1787005804808765": {
 		"service1": {
@@ -242,7 +244,7 @@ func TestDecoderSimpleForDepth3(t *testing.T) {
 }`
 	)
 
-	decoder := NewDecoder(mkReader(body), 3)
+	decoder := jstream.NewDecoder(mkReader(body), 3)
 	for mv = range decoder.Stream() {
 		counter++
 		assertEqual(t, 3, len(mv.Keys))
@@ -306,7 +308,7 @@ func TestDecoderSimpleForDepth3(t *testing.T) {
 func TestDecoderNested(t *testing.T) {
 	var (
 		counter int
-		mv      *MetaValue
+		mv      *jstream.MetaValue
 		body    = `{
   "1": {
     "bio": "bada bing bada boom",
@@ -328,7 +330,7 @@ func TestDecoderNested(t *testing.T) {
 }`
 	)
 
-	decoder := NewDecoder(mkReader(body), 2)
+	decoder := jstream.NewDecoder(mkReader(body), 2)
 
 	for mv = range decoder.Stream() {
 		counter++
@@ -343,7 +345,7 @@ func TestDecoderNested(t *testing.T) {
 func TestDecoderFlat(t *testing.T) {
 	var (
 		counter int
-		mv      *MetaValue
+		mv      *jstream.MetaValue
 		body    = `[
   "1st test string",
   "Roberto*Maestro", "Charles",
@@ -352,44 +354,44 @@ func TestDecoderFlat(t *testing.T) {
 ]`
 		expected = []struct {
 			Value     interface{}
-			ValueType ValueType
+			ValueType jstream.ValueType
 		}{
 			{
 				"1st test string",
-				String,
+				jstream.String,
 			},
 			{
 				"Roberto*Maestro",
-				String,
+				jstream.String,
 			},
 			{
 				"Charles",
-				String,
+				jstream.String,
 			},
 			{
 				int64(0),
-				Number,
+				jstream.Number,
 			},
 			{
 				nil,
-				Null,
+				jstream.Null,
 			},
 			{
 				false,
-				Boolean,
+				jstream.Boolean,
 			},
 			{
 				int64(1),
-				Number,
+				jstream.Number,
 			},
 			{
 				2.5,
-				Number,
+				jstream.Number,
 			},
 		}
 	)
 
-	decoder := NewDecoder(mkReader(body), 1)
+	decoder := jstream.NewDecoder(mkReader(body), 1)
 
 	for mv = range decoder.Stream() {
 		if mv.Value != expected[counter].Value {
@@ -410,7 +412,7 @@ func TestDecoderFlat(t *testing.T) {
 func TestDecoderMultiDoc(t *testing.T) {
 	var (
 		counter int
-		mv      *MetaValue
+		mv      *jstream.MetaValue
 		body    = `{ "bio": "bada bing bada boom", "id": 1, "name": "Charles" }
 { "bio": "bada bing bada boom", "id": 2, "name": "Charles" }
 { "bio": "bada bing bada boom", "id": 3, "name": "Charles" }
@@ -419,10 +421,10 @@ func TestDecoderMultiDoc(t *testing.T) {
 `
 	)
 
-	decoder := NewDecoder(mkReader(body), 0)
+	decoder := jstream.NewDecoder(mkReader(body), 0)
 
 	for mv = range decoder.Stream() {
-		if mv.ValueType != Object {
+		if mv.ValueType != jstream.Object {
 			t.Fatalf("got %v value type, expected: Object value type", mv.ValueType)
 		}
 		counter++
@@ -438,11 +440,11 @@ func TestDecoderMultiDoc(t *testing.T) {
 	// test at depth level 1
 	counter = 0
 	kvcounter := 0
-	decoder = NewDecoder(mkReader(body), 1)
+	decoder = jstream.NewDecoder(mkReader(body), 1)
 
 	for mv = range decoder.Stream() {
 		switch mv.Value.(type) {
-		case KV:
+		case jstream.KV:
 			kvcounter++
 		default:
 			counter++
@@ -462,11 +464,11 @@ func TestDecoderMultiDoc(t *testing.T) {
 	// test at depth level 1 w/ emitKV
 	counter = 0
 	kvcounter = 0
-	decoder = NewDecoder(mkReader(body), 1).EmitKV()
+	decoder = jstream.NewDecoder(mkReader(body), 1).EmitKV()
 
 	for mv = range decoder.Stream() {
 		switch mv.Value.(type) {
-		case KV:
+		case jstream.KV:
 			kvcounter++
 		default:
 			counter++

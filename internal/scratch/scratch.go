@@ -4,41 +4,41 @@ import (
 	"unicode/utf8"
 )
 
-type scratch struct {
-	data []byte
+type Scratch struct {
+	Data []byte
 	fill int
 }
 
 // reset scratch buffer
-func (s *scratch) reset() { s.fill = 0 }
+func (s *Scratch) Reset() { s.fill = 0 }
 
 // bytes returns the written contents of scratch buffer
-func (s *scratch) bytes() []byte { return s.data[0:s.fill] }
+func (s *Scratch) Bytes() []byte { return s.Data[0:s.fill] }
 
 // grow scratch buffer
-func (s *scratch) grow() {
-	ndata := make([]byte, cap(s.data)*2)
-	copy(ndata, s.data[:])
-	s.data = ndata
+func (s *Scratch) grow() {
+	ndata := make([]byte, cap(s.Data)*2)
+	copy(ndata, s.Data[:])
+	s.Data = ndata
 }
 
 // append single byte to scratch buffer
-func (s *scratch) add(c byte) {
-	if s.fill+1 >= cap(s.data) {
+func (s *Scratch) Add(c byte) {
+	if s.fill+1 >= cap(s.Data) {
 		s.grow()
 	}
 
-	s.data[s.fill] = c
+	s.Data[s.fill] = c
 	s.fill++
 }
 
 // append encoded rune to scratch buffer
-func (s *scratch) addRune(r rune) int {
-	if s.fill+utf8.UTFMax >= cap(s.data) {
+func (s *Scratch) AddRune(r rune) int {
+	if s.fill+utf8.UTFMax >= cap(s.Data) {
 		s.grow()
 	}
 
-	n := utf8.EncodeRune(s.data[s.fill:], r)
+	n := utf8.EncodeRune(s.Data[s.fill:], r)
 	s.fill += n
 	return n
 }

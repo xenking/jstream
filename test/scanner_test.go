@@ -1,4 +1,4 @@
-package scanner
+package test
 
 import (
 	"bufio"
@@ -6,6 +6,8 @@ import (
 	"io"
 	"sync/atomic"
 	"testing"
+
+	"github.com/xenking/jstream/internal/scanner"
 )
 
 var (
@@ -19,9 +21,9 @@ func TestScanner(t *testing.T) {
 
 	var i int
 	r := bytes.NewReader(data)
-	scanner := newScanner(r)
-	for scanner.pos < atomic.LoadInt64(&scanner.end) {
-		c := scanner.next()
+	s := scanner.New(r)
+	for s.Pos < atomic.LoadInt64(&s.End) {
+		c := s.Next()
 		if c != data[i] {
 			t.Fatalf("expected %s, got %s", string(data[i]), string(c))
 		}
@@ -111,8 +113,8 @@ func BenchmarkScanner(b *testing.B) {
 func benchmarkScanner(b []byte) {
 	r := bytes.NewReader(b)
 
-	scanner := newScanner(r)
-	for scanner.remaining() > 0 {
-		scanner.next()
+	s := scanner.New(r)
+	for s.Remaining() > 0 {
+		s.Next()
 	}
 }

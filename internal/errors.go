@@ -1,4 +1,4 @@
-package jstream
+package internal
 
 import (
 	"fmt"
@@ -15,14 +15,14 @@ type errPos [2]int // line number, byte offset where error occurred
 
 type SyntaxError struct {
 	msg     string // description of error
-	context string // additional error context
-	pos     errPos
-	atChar  byte
+	Context string // additional error context
+	Pos     errPos
+	AtChar  byte
 }
 
 func (e SyntaxError) Error() string {
-	loc := fmt.Sprintf("%s [%d,%d]", quoteChar(e.atChar), e.pos[0], e.pos[1])
-	return fmt.Sprintf("%s %s: %s", e.msg, e.context, loc)
+	loc := fmt.Sprintf("%s [%d,%d]", quoteChar(e.AtChar), e.Pos[0], e.Pos[1])
+	return fmt.Sprintf("%s %s: %s", e.msg, e.Context, loc)
 }
 
 // quoteChar formats c as a quoted character literal

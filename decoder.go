@@ -8,8 +8,9 @@ import (
 	"sync/atomic"
 	"unicode/utf16"
 
+	"github.com/xenking/jstream/internal"
 	"github.com/xenking/jstream/internal/scanner"
-	"github.com/xenking/jstream/internal/scratch"
+	data "github.com/xenking/jstream/internal/scratch"
 )
 
 // ValueType - defines the type of each JSON value
@@ -69,14 +70,14 @@ func (kvs KVS) MarshalJSON() ([]byte, error) {
 // Decoder wraps an io.Reader to provide incremental decoding of
 // JSON values
 type Decoder struct {
-	*scanner
+	*scanner.Scanner
 	emitDepth     int
 	emitKV        bool
 	emitRecursive bool
 	objectAsKVS   bool
 
 	depth   int
-	scratch *scratch
+	scratch *data.Scratch
 	metaCh  chan *MetaValue
 	err     error
 
@@ -90,9 +91,9 @@ type Decoder struct {
 // If emitDepth is < 0, values at every depth will be emitted.
 func NewDecoder(r io.Reader, emitDepth int) *Decoder {
 	d := &Decoder{
-		scanner:   newScanner(r),
+		Scanner:   scanner.New(r),
 		emitDepth: emitDepth,
-		scratch:   &scratch{data: make([]byte, 1024)},
+		scratch:   &data.Scratch{Data: make([]byte, 1024)},
 		metaCh:    make(chan *MetaValue, 128),
 	}
 	if emitDepth < 0 {
@@ -136,7 +137,7 @@ func (d *Decoder) Stream() chan *MetaValue {
 }
 
 // Pos returns the number of bytes consumed from the underlying reader
-func (d *Decoder) Pos() int { return int(d.pos) }
+func (d *Decoder) GetPos() int { return int(d.Pos) }
 
 // Err returns the most recent decoder error if any, or nil
 func (d *Decoder) Err() error { return d.err }
@@ -145,7 +146,7 @@ func (d *Decoder) Err() error { return d.err }
 func (d *Decoder) decode() {
 	defer close(d.metaCh)
 	d.skipSpaces()
-	for d.pos < atomic.LoadInt64(&d.end) {
+	for d.Pos < atomic.LoadInt64(&d.End) {
 		_, err := d.emitAny([]string{})
 		if err != nil {
 			d.err = err
@@ -156,15 +157,15 @@ func (d *Decoder) decode() {
 }
 
 func (d *Decoder) emitAny(pKeys []string) (interface{}, error) {
-	if d.pos >= atomic.LoadInt64(&d.end) {
-		return nil, d.mkError(ErrUnexpectedEOF)
+	if d.Pos >= atomic.LoadInt64(&d.End) {
+		return nil, d.mkError(internal.ErrUnexpectedEOF)
 	}
-	offset := d.pos - 1
+	offset := d.Pos - 1
 	i, t, err := d.any(pKeys)
 	if d.willEmit() {
 		d.metaCh <- &MetaValue{
 			Offset:    int(offset),
-			Length:    int(d.pos - offset),
+			Length:    int(d.Pos - offset),
 			Depth:     d.depth,
 			Keys:      pKeys,
 			Value:     i,
@@ -186,7 +187,7 @@ func (d *Decoder) willEmit() bool {
 // any used to decode any valid JSON value, and returns an
 // interface{} that holds the actual data
 func (d *Decoder) any(pKeys []string) (interface{}, ValueType, error) {
-	c := d.cur()
+	c := d.Cur()
 
 	switch c {
 	case '"':
@@ -201,11 +202,11 @@ func (d *Decoder) any(pKeys []string) (interface{}, ValueType, error) {
 		case int64, float64:
 			return v, Number, nil
 		default:
-			return nil, Number, d.mkError(ErrSyntax, "invalid number type")
+			return nil, Number, d.mkError(internal.ErrSyntax, "invalid number type")
 		}
 	case '-':
-		if c = d.next(); c < '0' && c > '9' {
-			return nil, Unknown, d.mkError(ErrSyntax, "in negative numeric literal")
+		if c = d.Next(); c < '0' && c > '9' {
+			return nil, Unknown, d.mkError(internal.ErrSyntax, "in negative numeric literal")
 		}
 		ni, err := d.number()
 		if err != nil {
@@ -217,32 +218,32 @@ func (d *Decoder) any(pKeys []string) (interface{}, ValueType, error) {
 		case float64:
 			return -n, Number, nil
 		default:
-			return nil, Number, d.mkError(ErrSyntax, "invalid number type")
+			return nil, Number, d.mkError(internal.ErrSyntax, "invalid number type")
 		}
 	case 'f':
-		if d.remaining() < 4 {
-			return nil, Unknown, d.mkError(ErrUnexpectedEOF)
+		if d.Remaining() < 4 {
+			return nil, Unknown, d.mkError(internal.ErrUnexpectedEOF)
 		}
-		if d.next() == 'a' && d.next() == 'l' && d.next() == 's' && d.next() == 'e' {
+		if d.Next() == 'a' && d.Next() == 'l' && d.Next() == 's' && d.Next() == 'e' {
 			return false, Boolean, nil
 		}
-		return nil, Unknown, d.mkError(ErrSyntax, "in literal false")
+		return nil, Unknown, d.mkError(internal.ErrSyntax, "in literal false")
 	case 't':
-		if d.remaining() < 3 {
-			return nil, Unknown, d.mkError(ErrUnexpectedEOF)
+		if d.Remaining() < 3 {
+			return nil, Unknown, d.mkError(internal.ErrUnexpectedEOF)
 		}
-		if d.next() == 'r' && d.next() == 'u' && d.next() == 'e' {
+		if d.Next() == 'r' && d.Next() == 'u' && d.Next() == 'e' {
 			return true, Boolean, nil
 		}
-		return nil, Unknown, d.mkError(ErrSyntax, "in literal true")
+		return nil, Unknown, d.mkError(internal.ErrSyntax, "in literal true")
 	case 'n':
-		if d.remaining() < 3 {
-			return nil, Unknown, d.mkError(ErrUnexpectedEOF)
+		if d.Remaining() < 3 {
+			return nil, Unknown, d.mkError(internal.ErrUnexpectedEOF)
 		}
-		if d.next() == 'u' && d.next() == 'l' && d.next() == 'l' {
+		if d.Next() == 'u' && d.Next() == 'l' && d.Next() == 'l' {
 			return nil, Null, nil
 		}
-		return nil, Unknown, d.mkError(ErrSyntax, "in literal null")
+		return nil, Unknown, d.mkError(internal.ErrSyntax, "in literal null")
 	case '[':
 		i, err := d.array(pKeys)
 		return i, Array, err
@@ -256,85 +257,85 @@ func (d *Decoder) any(pKeys []string) (interface{}, ValueType, error) {
 		}
 		return i, Object, err
 	default:
-		return nil, Unknown, d.mkError(ErrSyntax, "looking for beginning of value")
+		return nil, Unknown, d.mkError(internal.ErrSyntax, "looking for beginning of value")
 	}
 }
 
 // string called by `any` or `object`(for map keys) after reading `"`
 func (d *Decoder) string() (string, error) {
-	d.scratch.reset()
+	d.scratch.Reset()
 
 	var (
-		c = d.next()
+		c = d.Next()
 	)
 
 scan:
 	for {
 		switch {
 		case c == '"':
-			return string(d.scratch.bytes()), nil
+			return string(d.scratch.Bytes()), nil
 		case c == '\\':
-			c = d.next()
-			goto scan_esc
+			c = d.Next()
+			goto scanEsc
 		case c < 0x20:
-			return "", d.mkError(ErrSyntax, "in string literal")
+			return "", d.mkError(internal.ErrSyntax, "in string literal")
 		// Coerce to well-formed UTF-8.
 		default:
-			d.scratch.add(c)
-			if d.remaining() == 0 {
-				return "", d.mkError(ErrSyntax, "in string literal")
+			d.scratch.Add(c)
+			if d.Remaining() == 0 {
+				return "", d.mkError(internal.ErrSyntax, "in string literal")
 			}
-			c = d.next()
+			c = d.Next()
 		}
 	}
 
-scan_esc:
+scanEsc:
 	switch c {
 	case '"', '\\', '/', '\'':
-		d.scratch.add(c)
+		d.scratch.Add(c)
 	case 'u':
-		goto scan_u
+		goto scanU
 	case 'b':
-		d.scratch.add('\b')
+		d.scratch.Add('\b')
 	case 'f':
-		d.scratch.add('\f')
+		d.scratch.Add('\f')
 	case 'n':
-		d.scratch.add('\n')
+		d.scratch.Add('\n')
 	case 'r':
-		d.scratch.add('\r')
+		d.scratch.Add('\r')
 	case 't':
-		d.scratch.add('\t')
+		d.scratch.Add('\t')
 	default:
-		return "", d.mkError(ErrSyntax, "in string escape code")
+		return "", d.mkError(internal.ErrSyntax, "in string escape code")
 	}
-	c = d.next()
+	c = d.Next()
 	goto scan
 
-scan_u:
+scanU:
 	r := d.u4()
 	if r < 0 {
-		return "", d.mkError(ErrSyntax, "in unicode escape sequence")
+		return "", d.mkError(internal.ErrSyntax, "in unicode escape sequence")
 	}
 
 	// check for proceeding surrogate pair
-	c = d.next()
+	c = d.Next()
 	if !utf16.IsSurrogate(r) || c != '\\' {
-		d.scratch.addRune(r)
+		d.scratch.AddRune(r)
 		goto scan
 	}
-	if c = d.next(); c != 'u' {
-		d.scratch.addRune(r)
-		goto scan_esc
+	if c = d.Next(); c != 'u' {
+		d.scratch.AddRune(r)
+		goto scanEsc
 	}
 
 	r2 := d.u4()
 	if r2 < 0 {
-		return "", d.mkError(ErrSyntax, "in unicode escape sequence")
+		return "", d.mkError(internal.ErrSyntax, "in unicode escape sequence")
 	}
 
 	// write surrogate pair
-	d.scratch.addRune(utf16.DecodeRune(r, r2))
-	c = d.next()
+	d.scratch.AddRune(utf16.DecodeRune(r, r2))
+	c = d.Next()
 	goto scan
 }
 
@@ -344,7 +345,7 @@ func (d *Decoder) u4() rune {
 	// github.com/buger/jsonparser/blob/master/escape.go#L20
 	var h [4]int
 	for i := 0; i < 4; i++ {
-		c := d.next()
+		c := d.Next()
 		switch {
 		case c >= '0' && c <= '9':
 			h[i] = int(c - '0')
@@ -361,43 +362,43 @@ func (d *Decoder) u4() rune {
 
 // number called by `any` after reading number between 0 to 9
 func (d *Decoder) number() (interface{}, error) {
-	d.scratch.reset()
+	d.scratch.Reset()
 
 	var (
-		c       = d.cur()
+		c       = d.Cur()
 		isFloat bool
 	)
 
 	// digits first
 	switch {
 	case c == '0':
-		d.scratch.add(c)
-		c = d.next()
+		d.scratch.Add(c)
+		c = d.Next()
 	case '1' <= c && c <= '9':
-		for ; c >= '0' && c <= '9'; c = d.next() {
-			d.scratch.add(c)
+		for ; c >= '0' && c <= '9'; c = d.Next() {
+			d.scratch.Add(c)
 		}
 	}
 
 	// . followed by 1 or more digits
 	if c == '.' {
 		isFloat = true
-		d.scratch.add(c)
+		d.scratch.Add(c)
 
 		// first char following must be digit
-		if c = d.next(); c < '0' && c > '9' {
-			return 0, d.mkError(ErrSyntax, "after decimal point in numeric literal")
+		if c = d.Next(); c < '0' && c > '9' {
+			return 0, d.mkError(internal.ErrSyntax, "after decimal point in numeric literal")
 		}
-		d.scratch.add(c)
+		d.scratch.Add(c)
 
 		for {
-			if d.remaining() == 0 {
-				return 0, d.mkError(ErrUnexpectedEOF)
+			if d.Remaining() == 0 {
+				return 0, d.mkError(internal.ErrUnexpectedEOF)
 			}
-			if c = d.next(); c < '0' || c > '9' {
+			if c = d.Next(); c < '0' || c > '9' {
 				break
 			}
-			d.scratch.add(c)
+			d.scratch.Add(c)
 		}
 	}
 
@@ -405,35 +406,35 @@ func (d *Decoder) number() (interface{}, error) {
 	// 1 or more digits.
 	if c == 'e' || c == 'E' {
 		isFloat = true
-		d.scratch.add(c)
+		d.scratch.Add(c)
 
-		if c = d.next(); c == '+' || c == '-' {
-			d.scratch.add(c)
-			if c = d.next(); c < '0' || c > '9' {
-				return 0, d.mkError(ErrSyntax, "in exponent of numeric literal")
+		if c = d.Next(); c == '+' || c == '-' {
+			d.scratch.Add(c)
+			if c = d.Next(); c < '0' || c > '9' {
+				return 0, d.mkError(internal.ErrSyntax, "in exponent of numeric literal")
 			}
-			d.scratch.add(c)
+			d.scratch.Add(c)
 		}
-		for ; c >= '0' && c <= '9'; c = d.next() {
-			d.scratch.add(c)
+		for ; c >= '0' && c <= '9'; c = d.Next() {
+			d.scratch.Add(c)
 		}
 	}
 
-	d.back()
+	d.Back()
 
 	if isFloat {
 		var (
 			err error
 			n   float64
 		)
-		sn := string(d.scratch.bytes())
+		sn := string(d.scratch.Bytes())
 		if n, err = strconv.ParseFloat(sn, 64); err != nil {
 			return 0, err
 		}
 		return n, err
 	}
 
-	sn := string(d.scratch.bytes())
+	sn := string(d.scratch.Bytes())
 	return strconv.ParseInt(sn, 10, 64)
 }
 
@@ -470,7 +471,7 @@ scan:
 	case ']':
 		goto out
 	default:
-		err = d.mkError(ErrSyntax, "after array element")
+		err = d.mkError(internal.ErrSyntax, "after array element")
 	}
 
 out:
@@ -503,11 +504,11 @@ func (d *Decoder) object(pKeys []string) (map[string]interface{}, error) {
 
 scan:
 	for {
-		offset := d.pos - 1
+		offset := d.Pos - 1
 
 		// read string key
 		if c != '"' {
-			err = d.mkError(ErrSyntax, "looking for beginning of object key string")
+			err = d.mkError(internal.ErrSyntax, "looking for beginning of object key string")
 			break
 		}
 		if k, err = d.string(); err != nil {
@@ -516,7 +517,7 @@ scan:
 
 		// read colon before value
 		if c = d.skipSpaces(); c != ':' {
-			err = d.mkError(ErrSyntax, "after object key")
+			err = d.mkError(internal.ErrSyntax, "after object key")
 			break
 		}
 
@@ -530,7 +531,7 @@ scan:
 			if d.willEmit() {
 				d.metaCh <- &MetaValue{
 					Offset:    int(offset),
-					Length:    int(d.pos - offset),
+					Length:    int(d.Pos - offset),
 					Depth:     d.depth,
 					Keys:      keys,
 					Value:     KV{k, v},
@@ -555,7 +556,7 @@ scan:
 			c = d.skipSpaces()
 			goto scan
 		default:
-			err = d.mkError(ErrSyntax, "after object key:value pair")
+			err = d.mkError(internal.ErrSyntax, "after object key:value pair")
 			goto out
 		}
 	}
@@ -590,11 +591,11 @@ func (d *Decoder) objectOrdered(pKeys []string) (KVS, error) {
 
 scan:
 	for {
-		offset := d.pos - 1
+		offset := d.Pos - 1
 
 		// read string key
 		if c != '"' {
-			err = d.mkError(ErrSyntax, "looking for beginning of object key string")
+			err = d.mkError(internal.ErrSyntax, "looking for beginning of object key string")
 			break
 		}
 		if k, err = d.string(); err != nil {
@@ -603,7 +604,7 @@ scan:
 
 		// read colon before value
 		if c = d.skipSpaces(); c != ':' {
-			err = d.mkError(ErrSyntax, "after object key")
+			err = d.mkError(internal.ErrSyntax, "after object key")
 			break
 		}
 
@@ -617,7 +618,7 @@ scan:
 			if d.willEmit() {
 				d.metaCh <- &MetaValue{
 					Offset:    int(offset),
-					Length:    int(d.pos - offset),
+					Length:    int(d.Pos - offset),
 					Depth:     d.depth,
 					Keys:      keys,
 					Value:     KV{k, v},
@@ -642,7 +643,7 @@ scan:
 			c = d.skipSpaces()
 			goto scan
 		default:
-			err = d.mkError(ErrSyntax, "after object key:value pair")
+			err = d.mkError(internal.ErrSyntax, "after object key:value pair")
 			goto out
 		}
 	}
@@ -654,10 +655,10 @@ out:
 
 // returns the next char after white spaces
 func (d *Decoder) skipSpaces() byte {
-	for d.pos < atomic.LoadInt64(&d.end) {
-		switch c := d.next(); c {
+	for d.Pos < atomic.LoadInt64(&d.End) {
+		switch c := d.Next(); c {
 		case '\n':
-			d.lineStart = d.pos
+			d.lineStart = d.Pos
 			d.lineNo++
 			continue
 		case ' ', '\t', '\r':
@@ -670,12 +671,12 @@ func (d *Decoder) skipSpaces() byte {
 }
 
 // create syntax errors at current position, with optional context
-func (d *Decoder) mkError(err SyntaxError, context ...string) error {
+func (d *Decoder) mkError(err internal.SyntaxError, context ...string) error {
 	if len(context) > 0 {
-		err.context = context[0]
+		err.Context = context[0]
 	}
-	err.atChar = d.cur()
-	err.pos[0] = d.lineNo + 1
-	err.pos[1] = int(d.pos - d.lineStart)
+	err.AtChar = d.Cur()
+	err.Pos[0] = d.lineNo + 1
+	err.Pos[1] = int(d.Pos - d.lineStart)
 	return err
 }
