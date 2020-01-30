@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/bcicen/jstream"
+	"github.com/xenking/jstream"
 )
 
 var (

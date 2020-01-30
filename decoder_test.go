@@ -35,9 +35,9 @@ func TestDecoderSimple(t *testing.T) {
 		assertEqual(t, "bada bing bada boom", valStr)
 
 		assertNotNil(t, result["id"])
-		valInt, ok := result["id"].(float64)
+		valInt, ok := result["id"]
 		assertTrue(t, ok)
-		assertEqual(t, 1, int(valInt))
+		assertEqual(t, int64(1), valInt)
 
 		assertNotNil(t, result["name"])
 		valStr, ok = (result["name"]).(string)
@@ -79,7 +79,7 @@ func TestDecoderSimpleForMapMapArray(t *testing.T) {
 		assertTrue(t, ok)
 		assertEqual(t, 3, len(result))
 		for index, value := range result {
-			assertEqual(t, index+counter, int(value.(float64)))
+			assertEqual(t, int64(index+counter), value)
 		}
 
 		switch counter {
@@ -128,7 +128,7 @@ func TestDecoderSimpleForMapArray(t *testing.T) {
 		assertTrue(t, ok)
 		assertEqual(t, 3, len(result))
 		for index, value := range result {
-			assertEqual(t, index+counter, int(value.(float64)))
+			assertEqual(t, int64(index+counter), value)
 		}
 
 		switch counter {
@@ -177,7 +177,7 @@ func TestDecoderSimpleForEmitKV(t *testing.T) {
 		assertTrue(t, ok)
 		assertEqual(t, 3, len(result))
 		for index, value := range result {
-			assertEqual(t, index+counter, int(value.(float64)))
+			assertEqual(t, int64(index+counter), value)
 		}
 
 		switch counter {
@@ -250,7 +250,7 @@ func TestDecoderSimpleForDepth3(t *testing.T) {
 		assertTrue(t, ok)
 		assertEqual(t, 3, len(result))
 		for index, value := range result {
-			assertEqual(t, index+counter, int(value.(float64)))
+			assertEqual(t, int64(index+counter), value)
 		}
 
 		switch counter {
