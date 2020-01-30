@@ -1,4 +1,4 @@
-package jstream
+package scanner
 
 import (
 	"io"

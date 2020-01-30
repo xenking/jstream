@@ -1,4 +1,4 @@
-package jstream
+package scratch
 
 import (
 	"unicode/utf8"

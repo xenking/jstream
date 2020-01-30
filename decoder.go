@@ -7,6 +7,9 @@ import (
 	"strconv"
 	"sync/atomic"
 	"unicode/utf16"
+
+	"github.com/xenking/jstream/internal/scanner"
+	"github.com/xenking/jstream/internal/scratch"
 )
 
 // ValueType - defines the type of each JSON value
