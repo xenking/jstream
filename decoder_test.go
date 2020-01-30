@@ -90,7 +90,7 @@ func TestDecoderFlat(t *testing.T) {
 				String,
 			},
 			{
-				0.0,
+				int64(0),
 				Number,
 			},
 			{
@@ -102,7 +102,7 @@ func TestDecoderFlat(t *testing.T) {
 				Boolean,
 			},
 			{
-				1.0,
+				int64(1),
 				Number,
 			},
 			{
